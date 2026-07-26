@@ -33,6 +33,40 @@ KNOWN_GROUPS = {
     "https://buktex.com/polisatin-flanel-ievro": {"id": 1011, "name": "Полісатин фланель євро"},
 }
 
+URL_TO_WHOLESALE_REGEX = {
+    # Постільна білизна
+    "https://buktex.com/simeyka": r"полікотон:.*?сімейка\s*-\s*(\d+)",
+    "https://buktex.com/polikoton-odnospalniy": r"полікотон:.*?півторачка\s*-\s*(\d+)",
+    "https://buktex.com/polikoton-dvospalniy": r"полікотон:.*?двухспальний\s*-\s*(\d+)",
+    "https://buktex.com/polikoton-ievro-rozmir": r"полікотон:.*?євро розмір\s*-\s*(\d+)",
+    
+    "https://buktex.com/gold-pivtorachka-dityacha": r"бязь голд-люкс:.*?півторачка\s*-\s*(\d+)",
+    "https://buktex.com/koton-odnospalniy": r"бязь голд-люкс:.*?півторачка\s*-\s*(\d+)",
+    "https://buktex.com/koton-dvospalniy": r"бязь голд-люкс:.*?двухспальний\s*-\s*(\d+)",
+    "https://buktex.com/koton-ievro-rozmir": r"бязь голд-люкс:.*?євро розмір\s*-\s*(\d+)",
+    
+    "https://buktex.com/talo-pivtorachka": r"talo:.*?talo\s*півторачка\s*-\s*(\d+)",
+    "https://buktex.com/talo-dvohspalka": r"talo:.*?talo\s*двохспальний\s*-\s*(\d+)",
+    "https://buktex.com/talo-ievro": r"talo:.*?talo\s*євро\s*-\s*(\d+)",
+
+    # Простині
+    "https://buktex.com/prostin-pk160": r"простині на резинці.*?(?:полікотон|пк)\s*160х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/polikoton-160": r"простині на резинці.*?полікотон\s*160х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/polikoton-180": r"простині на резинці.*?полікотон\s*180х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/prostin-strayp-160": r"простині на резинці.*?страйп сатин\s*160х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/prostin-strayp-satin-180": r"простині на резинці.*?страйп сатин\s*180х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/prostin-streych-160": r"простині на резинці.*?стрейч\s*160х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/prostin-streych-180": r"простині на резинці.*?стрейч\s*180х200\s*см\s*-\s*(\d+)",
+    
+    # Пледи
+    "https://buktex.com/pled-serdce": r"плед сердце:.*?200х230\s*-\s*(\d+)",
+    "https://buktex.com/pled-sharpey": r"плед шарпей:.*?200х230\s*-\s*(\d+)",
+    
+    # Скатертини
+    "https://buktex.com/shuntuk-150": r"скатертина шунтук:.*?120х150\s*-\s*(\d+)",
+    "https://buktex.com/shuntuk-220": r"скатертина шунтук:.*?150х220\s*-\s*(\d+)",
+}
+
 OUTPUT_DIR  = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_NAME = "feed.xml"
 
@@ -70,6 +104,26 @@ def make_driver():
     return driver
 
 # ---------- Parsing Logic ----------
+def fetch_wholesale_prices(driver):
+    print("[INFO] Парсинг оптовых цен со страницы optova-spivpracya...")
+    driver.get(urljoin(BASE, "/optova-spivpracya"))
+    time.sleep(random.uniform(2.0, 3.0))
+    soup = BeautifulSoup(driver.page_source, "lxml")
+    
+    # Extract all text preserving order as one block to apply cross-line regexes safely
+    text = soup.get_text(separator=' ', strip=True).lower()
+    
+    wholesale_prices = {}
+    for cat_url, regex_pattern in URL_TO_WHOLESALE_REGEX.items():
+        match = re.search(regex_pattern, text)
+        if match:
+            wholesale_prices[cat_url] = match.group(1)
+            print(f"      [ОПТ] Найдена цена для {cat_url}: {match.group(1)} грн")
+        else:
+            print(f"      [!] Не найдена опт. цена для {cat_url} по регулярному выражению")
+            
+    return wholesale_prices
+
 def discover_categories(driver):
     print("[INFO] Поиск всех категорий на сайте...")
     discovered = {}
@@ -223,6 +277,7 @@ def main():
     used_groups = {} 
 
     try:
+        wholesale_prices = fetch_wholesale_prices(driver)
         all_categories = discover_categories(driver)
         
         for cat_url, info in all_categories.items():
@@ -231,12 +286,22 @@ def main():
             gname = info["name"]
             used_groups[gid] = gname
             
+            # Use parsed wholesale price for this category, or None
+            opt_price = wholesale_prices.get(cat_url)
+            
             for link in links:
                 try:
                     print(f"      Парсим: {link}")
                     p = parse_product_page(driver, link)
                     
                     product_id = f"{gid}-{p.sku if p.sku else hashlib.md5(link.encode()).hexdigest()[:8]}"
+                    
+                    # If we found a wholesale price, override the parsed retail price
+                    final_price = opt_price if opt_price else p.price_uah
+                    if opt_price:
+                        print(f"        -> Заменяем розничную цену {p.price_uah} на оптовую {opt_price}")
+                    else:
+                        print(f"        -> Оптовая цена не найдена, используем розничную {p.price_uah}")
                     
                     products_data.append({
                         "id": product_id,
@@ -245,7 +310,7 @@ def main():
                         "description": p.description,
                         "sku": p.sku,
                         "availability": p.availability_pm,
-                        "price": p.price_uah,
+                        "price": final_price,
                         "images": p.images,
                         "group_id": gid
                     })
@@ -266,3 +331,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
