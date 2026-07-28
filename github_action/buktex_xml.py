@@ -50,7 +50,7 @@ URL_TO_WHOLESALE_REGEX = {
     "https://buktex.com/talo-ievro": r"talo:.*?talo\s*євро\s*-\s*(\d+)",
 
     # Простині
-    "https://buktex.com/prostin-pk160": r"простині на резинці.*?(?:полікотон|пк)\s*160х200\s*см\s*-\s*(\d+)",
+    "https://buktex.com/prostin-pk160": r"простині на резинці.*?полікотон\s*180х200\s*см\s*-\s*(\d+)", # У поставщика ошибка в URL: prostin-pk160 это на самом деле 180х200
     "https://buktex.com/polikoton-160": r"простині на резинці.*?полікотон\s*160х200\s*см\s*-\s*(\d+)",
     "https://buktex.com/polikoton-180": r"простині на резинці.*?полікотон\s*180х200\s*см\s*-\s*(\d+)",
     "https://buktex.com/prostin-strayp-160": r"простині на резинці.*?страйп сатин\s*160х200\s*см\s*-\s*(\d+)",
